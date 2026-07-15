@@ -1,0 +1,5 @@
+Pydantic AI Course Notes
+
+Pydantic AI agents use a model plus instructions. A function decorated with agent.tool can be offered to the model. Dependencies are typed runtime objects passed through RunContext.
+
+Keep system instructions narrow, validate external data, and show users when tools were used. Message history can be passed back into subsequent runs to support a conversation.

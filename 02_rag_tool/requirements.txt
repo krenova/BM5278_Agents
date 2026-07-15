@@ -1,0 +1,3 @@
+pydantic-ai
+chromadb
+python-dotenv

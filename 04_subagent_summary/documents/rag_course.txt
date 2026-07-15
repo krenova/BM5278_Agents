@@ -1,0 +1,5 @@
+RAG Course Notes
+
+Retrieval-augmented generation retrieves relevant source text before answering. Chunk source documents into small coherent passages, index each passage, then supply the best matches as context.
+
+Vector retrieval can be wrong. State when an answer is based on retrieved notes and do not invent facts not supported by the sources.

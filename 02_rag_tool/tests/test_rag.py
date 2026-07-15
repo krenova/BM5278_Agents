@@ -1,0 +1,11 @@
+import unittest
+from pathlib import Path
+from rag import chunk_text, index_documents, load_documents, retrieve
+class Fake:
+ def upsert(self, **kw): self.data=kw
+ def query(self, **kw): return {'documents':[['x']], 'metadatas':[[{'source':'n'}]], 'distances':[[.1]]}
+class TestRag(unittest.TestCase):
+ def test_load(self): self.assertTrue(load_documents(Path(__file__).parents[1]/'documents')); self.assertEqual(chunk_text('a\n\nb', 10), ['a\n\nb'])
+ def test_index_retrieve(self):
+  c=Fake(); self.assertEqual(index_documents(c,[('n','x')]),1); self.assertEqual(retrieve(c,'q')[0]['source'],'n')
+if __name__ == '__main__': unittest.main()
