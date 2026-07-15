@@ -1,6 +1,7 @@
 from __future__ import annotations
 import asyncio, os, sys
 from dataclasses import dataclass, field
+from pathlib import Path
 from dotenv import load_dotenv
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.mcp import MCPServerStdio
@@ -9,8 +10,8 @@ from rag import format_context, open_collection, retrieve
 class Deps: collection: object; diagnostics: list[str]=field(default_factory=list)
 INSTRUCTIONS='''You are a helpful course assistant. Use search_course_notes for course/RAG/Pydantic AI questions, and use the weather tool for current weather questions. Do not use tools for ordinary general knowledge. Mention used sources or tools.'''
 async def main():
- load_dotenv(); model=os.getenv('MODEL_NAME')
- if not model: raise SystemExit('MODEL_NAME is missing. Copy .env.example to .env and configure it.')
+ load_dotenv(Path(__file__).parent.parent / '.env'); model=os.getenv('MODEL_NAME')
+ if not model: raise SystemExit('MODEL_NAME is missing. Configure the project-root .env file.')
  # MCPServerStdio is a Pydantic AI Toolset connected to this local server.
  weather_toolset=MCPServerStdio('python', args=['weather_server.py'])
  async with weather_toolset:

@@ -6,11 +6,11 @@ Each numbered folder is a standalone lesson. Start at Part 1 and move forward: e
 
 ```bash
 source .venv/bin/activate
-python -m pip install -r 01_rag_in_context/requirements.txt
-cp 01_rag_in_context/.env.example 01_rag_in_context/.env
+python -m pip install -r requirements.txt
+cp .env.example .env
 ```
 
-Set `MODEL_NAME` to a Pydantic AI model identifier and set that provider's credentials. The included `.env.example` shows both an OpenAI option (`openai:gpt-4.1-mini`) and a MiniMax Anthropic-compatible option (`anthropic:MiniMax-M3` with `ANTHROPIC_BASE_URL`). Copy the `.env` setup into the other lesson folders as needed. `python-dotenv` loads `.env` when the program starts.
+Set exactly one active `MODEL_NAME` and its matching credentials. The included root `.env.example` shows both an OpenAI option (`openai:gpt-4.1-mini`) and a MiniMax Anthropic-compatible option (`anthropic:MiniMax-M3` with `ANTHROPIC_BASE_URL`). Every lesson explicitly loads this one root `.env`; do not create per-lesson `.env` files.
 
 Run a lesson from its own folder:
 

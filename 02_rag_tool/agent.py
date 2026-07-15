@@ -1,6 +1,7 @@
 from __future__ import annotations
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from dotenv import load_dotenv
 from pydantic_ai import Agent, RunContext
 from rag import format_context, open_collection, retrieve
@@ -13,8 +14,8 @@ class Deps:
 INSTRUCTIONS = """You are a helpful course assistant. You may call search_course_notes for questions about this course, Pydantic AI, or RAG. Do not call it for ordinary general-knowledge conversation. Explain when you used course notes."""
 
 def main():
-    load_dotenv(); model=os.getenv('MODEL_NAME')
-    if not model: raise SystemExit('MODEL_NAME is missing. Copy .env.example to .env and configure it.')
+    load_dotenv(Path(__file__).parent.parent / '.env'); model=os.getenv('MODEL_NAME')
+    if not model: raise SystemExit('MODEL_NAME is missing. Configure the project-root .env file.')
     agent=Agent(model, deps_type=Deps, instructions=INSTRUCTIONS)
     @agent.tool
     def search_course_notes(ctx: RunContext[Deps], question: str) -> str:
