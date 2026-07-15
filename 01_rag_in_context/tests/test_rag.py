@@ -1,12 +1,19 @@
 import unittest
 from pathlib import Path
+
 from rag import chunk_text, index_documents, load_documents, retrieve
 
 
 class FakeCollection:
-    def upsert(self, **kwargs): self.upserted = kwargs
+    def upsert(self, **kwargs):
+        self.upserted = kwargs
+
     def query(self, **kwargs):
-        return {"documents": [["retrieved text"]], "metadatas": [[{"source": "notes"}]], "distances": [[0.12]]}
+        return {
+            "documents": [["retrieved text"]],
+            "metadatas": [[{"source": "notes"}]],
+            "distances": [[0.12]],
+        }
 
 
 class RagTests(unittest.TestCase):
@@ -20,4 +27,5 @@ class RagTests(unittest.TestCase):
         self.assertEqual(retrieve(collection, "question")[0]["source"], "notes")
 
 
-if __name__ == "__main__": unittest.main()
+if __name__ == "__main__":
+    unittest.main()

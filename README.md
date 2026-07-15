@@ -16,8 +16,13 @@ Run a lesson from its own folder:
 
 ```bash
 cd 01_rag_in_context
-python agent.py
+python main.py
 ```
+
+For a teaching-oriented live trace, run `python main.py --trace`. It prints the
+agent instructions, prior session messages, new model input, tool calls and
+results, and streamed model text. Trace output is terminal-only and shows
+observable exchanges, not hidden model reasoning; credentials are redacted.
 
 Lesson order:
 
@@ -27,4 +32,11 @@ Lesson order:
 4. `04_subagent_summary` — adds an executive-brief subagent.
 5. `05_skill_tool` — replaces the subagent summary route with a Markdown skill.
 
-The `.chroma/` directories are generated locally on first run and are deliberately ignored by Git. Run tests with `python -m unittest discover -s tests` inside a lesson folder.
+Every lesson uses the same teaching layout:
+
+- `main.py` is the small CLI entrypoint.
+- `agent.py` contains the stateful `CourseAssistant`: its prompt constants, `message_history`, tool registration, and `ask()` method.
+- `config.py` loads the shared project-root `.env`.
+- `rag.py` contains local document indexing and retrieval; Parts 3–5 also include `weather_server.py`.
+
+The `.chroma/` directories are generated locally on first run and are deliberately ignored by Git. Run tests with `python -m unittest discover -s tests` inside a lesson folder. Check formatting and linting from the root with `ruff format --check .` and `ruff check .`.

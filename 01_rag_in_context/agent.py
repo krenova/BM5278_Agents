@@ -1,32 +1,37 @@
-from __future__ import annotations
+"""Part 1 assistant: retrieval is inserted into every model prompt."""
 
-import os
-from pathlib import Path
-from dotenv import load_dotenv
-from pydantic_ai import Agent
+from trace import LiveTrace
+
+from pydantic_ai import Agent as PydanticAgent
 from rag import format_context, open_collection, retrieve
 
-INSTRUCTIONS = """You are a helpful course assistant. Use the supplied course-note context when relevant. Say when the notes do not answer a question; answer general questions normally."""
+SYSTEM_PROMPT = """You are a helpful course assistant. Use the supplied course-note
+context when relevant. Say when the notes do not answer a question; answer general
+questions normally."""
 
 
-def main() -> None:
-    load_dotenv(Path(__file__).parent.parent / ".env")
-    model = os.getenv("MODEL_NAME")
-    if not model:
-        raise SystemExit("MODEL_NAME is missing. Configure the project-root .env file.")
-    agent = Agent(model, instructions=INSTRUCTIONS)
-    collection, history = open_collection(), []
-    print("Part 1: RAG context is retrieved on every turn. Type quit to leave.")
-    while (question := input("\nyou> ").strip()).lower() not in {"quit", "exit"}:
-        if not question:
-            continue
-        hits = retrieve(collection, question)
-        print("[retrieval] " + ", ".join(f"{h['source']} ({h['distance']:.3f})" for h in hits))
+class CourseAssistant:
+    """Owns the prompt, conversation memory, and retrieval context for Part 1."""
+
+    def __init__(self, model_name: str, trace: bool = False) -> None:
+        self.agent = PydanticAgent(model_name, instructions=SYSTEM_PROMPT)
+        self.collection = open_collection()
+        self.message_history = []  # Pydantic AI messages retained for this CLI session.
+        self.diagnostics: list[str] = []
+        self.trace = LiveTrace(trace)
+
+    def ask(self, question: str) -> str:
+        """Retrieve notes, add them to the prompt, and save the resulting memory."""
+        hits = retrieve(self.collection, question)
+        self.diagnostics = [
+            "[retrieval] " + ", ".join(f"{hit['source']} ({hit['distance']:.3f})" for hit in hits)
+        ]
         prompt = f"Course-note context:\n{format_context(hits)}\n\nUser question: {question}"
-        result = agent.run_sync(prompt, message_history=history)
-        history = result.all_messages()
-        print(f"assistant> {result.output}")
-
-
-if __name__ == "__main__":
-    main()
+        self.trace.begin_turn(SYSTEM_PROMPT, self.message_history, prompt)
+        result = self.agent.run_sync(
+            prompt,
+            message_history=self.message_history,
+            event_stream_handler=self.trace.event_stream_handler if self.trace.enabled else None,
+        )
+        self.message_history = result.all_messages()
+        return result.output
