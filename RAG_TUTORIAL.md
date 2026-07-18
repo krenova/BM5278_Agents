@@ -1,4 +1,4 @@
-# Retrieval-Augmented Generation (RAG) Notes: A Practical Tutorial
+# Retrieval-Augmented Generation (RAG): A Practical Tutorial
 
 This tutorial explains how retrieval-augmented generation works, why it is useful,
 how it is implemented in this repository, and how to evaluate and improve a RAG
@@ -471,8 +471,10 @@ Run the lessons in order:
 1. **Part 1 — RAG in context**: the application retrieves on every turn and injects
    passages directly into the model input.
 2. **Part 2 — Model-selected RAG tool**: the model chooses whether to call
-   `search_course_notes`.
-3. **Part 3 — MCP weather**: combines local RAG with a separate current-data tool.
+   `search_course_notes`. Its assistant keeps the same simple state layout as Part 1;
+   the key change is that retrieval is registered as a tool instead of being called
+   before every model request.
+3. **Part 3 — Remote Star Wars MCP**: combines local RAG with a separate remote MCP toolset.
 4. **Part 4 — Summary subagent**: demonstrates multi-agent orchestration around
    retrieval and other tools.
 5. **Part 5 — Markdown skill tool**: demonstrates loading reusable instructions as a
@@ -504,4 +506,3 @@ and model-selected tool retrieval.
 - [ ] Token cost and latency are monitored.
 - [ ] Logs are redacted and handled as potentially sensitive data.
 - [ ] Re-indexing and rollback procedures are documented.
-

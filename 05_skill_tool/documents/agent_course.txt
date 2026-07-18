@@ -1,5 +1,221 @@
-Pydantic AI Course Notes
+# Pydantic AI Agent Notes: A Practical Tutorial
 
-Pydantic AI agents use a model plus instructions. A function decorated with agent.tool can be offered to the model. Dependencies are typed runtime objects passed through RunContext.
+This tutorial explains how a Pydantic AI agent is put together, how the five
+lessons in this repository build on one another, and what each new piece of
+machinery — tools, MCP toolsets, subagents, skills, and tracing — is actually
+for.
 
-Keep system instructions narrow, validate external data, and show users when tools were used. Message history can be passed back into subsequent runs to support a conversation.
+## 1. What is an agent here?
+
+A Pydantic AI `Agent` is a model plus a set of instructions plus zero or more
+toolsets:
+
+```python
+self.agent = PydanticAgent(
+    model_name,
+    instructions=SYSTEM_PROMPT,
+    toolsets=[self.course_note_toolset],
+)
+```
+
+Calling `agent.run(question, message_history=...)` (or the synchronous
+`run_sync`) sends the instructions, the tool definitions, the prior message
+history, and the new question to the model, lets the model optionally call
+tools, and returns a result whose `.output` is the final answer and whose
+`.all_messages()` is the updated history to keep for the next turn. Everything
+else in this repository is built from that one call.
+
+## 2. The five lessons: a learning path
+
+1. **Part 1 — RAG in context** (`01_rag_in_context`): the application, not the
+   model, decides to retrieve. `CourseAssistant.ask()` calls `retrieve()`
+   directly and builds a prompt containing a `Course-note context:` block
+   before ever calling the model. There are no tools yet.
+2. **Part 2 — Model-selected RAG tool** (`02_rag_tool`): retrieval becomes a
+   tool, `search_course_notes`, registered on a `FunctionToolset`. The model
+   now decides for itself whether a question needs course notes.
+3. **Part 3 — Remote Star Wars MCP** (`03_mcp_starwars`): a second toolset is
+   added, this time a remote one reached over HTTPS via the Model Context
+   Protocol (MCP) instead of a Python function running in-process.
+4. **Part 4 — Summary subagent** (`04_subagent_summary`): adds a third
+   toolset holding one tool, `create_executive_brief`, whose implementation
+   delegates the work to a second, independent `PydanticAgent` — a subagent
+   with its own instructions and no view of the parent conversation.
+5. **Part 5 — Markdown skill tool** (`05_skill_tool`): replaces the subagent
+   with a `load_executive_brief_skill` tool that returns the text of a
+   Markdown file (`SKILL.md`). The same single agent then follows those
+   instructions itself; no second model instance is created.
+
+Each lesson keeps the previous lesson's behavior intact so the diff between
+consecutive parts is small and easy to read in `agent.py`.
+
+## 3. Instructions, tools, and message history
+
+`instructions` (sometimes called the system prompt) is a string describing
+the agent's role and when to use each tool. It is not part of the visible
+conversation; it is sent to the model on every single call, alongside the
+tool definitions, because chat-completion APIs are stateless — the provider
+remembers nothing between calls, so the caller resends the full context
+every time.
+
+A tool is a Python function turned into something the model can call. The
+simplest form uses `FunctionToolset` and the `@toolset.tool_plain` decorator:
+
+```python
+course_note_toolset = FunctionToolset()
+
+@course_note_toolset.tool_plain
+def search_course_notes(question: str) -> str:
+    """Search local course notes for relevant source passages."""
+    hits = retrieve(collection, question)
+    return format_context(hits)
+```
+
+The function's docstring becomes the tool's description, and its type hints
+become its JSON parameter schema — both are sent to the model so it can
+decide whether and how to call the tool. `tool_plain` is used throughout this
+repository (rather than the `RunContext`-based `tool` decorator) to keep the
+lessons minimal: no dependency-injection dataclass is needed when the tool
+can simply close over `self`.
+
+`message_history` is the running list of prior messages for a session. It is
+passed into every `agent.run()` call and replaced with `result.all_messages()`
+afterward, so the model sees the whole conversation, not just the latest
+question.
+
+## 4. The tool-calling loop: how the model decides to act
+
+A single `ask()` call can involve more than one round-trip to the model.
+Internally, Pydantic AI alternates between two phases: the model decides what
+to do next (answer directly, call one or more tools, or both), and then any
+requested tools are executed locally or remotely. If tools were called, their
+results are added to the conversation and the model is asked again — the
+model always gets a chance to review real tool output before producing its
+final answer. This decide-then-act cycle repeats until the model responds
+with no further tool calls.
+
+Because each of those model calls is a fresh, stateless API request, the
+instructions and the full tool list are resent on every one of them, not
+just once at the start of the conversation. Multiple tool calls requested in
+the same round are executed concurrently (`asyncio.create_task` per call),
+not necessarily one after another.
+
+## 5. MCP toolsets: connecting to a remote tool server
+
+`FunctionToolset` tools run as ordinary Python inside the same process. An
+`MCPToolset` instead talks to a separate server over the Model Context
+Protocol — in this repository, a remote gateway reached over HTTPS:
+
+```python
+self.star_wars_mcp = MCPToolset(StreamableHttpTransport(STAR_WARS_MCP_URL))
+self.star_wars_toolset = self.star_wars_mcp.filtered(
+    lambda ctx, tool_def: tool_def.name in STAR_WARS_TOOL_NAMES
+)
+```
+
+Two consequences follow from that being a network connection rather than a
+local function call. First, the toolset must be opened and closed as an
+async context manager (`await self.star_wars_toolset.__aenter__()` /
+`__aexit__()`), typically in the `CourseAssistant`'s own `__aenter__` /
+`__aexit__`. Second, listing the available tools (`list_tools()`) is a real
+request to the server, not a lookup in memory — Pydantic AI caches the
+result for the rest of the session by default.
+
+A shared gateway can expose far more tools than one lesson needs — the SWAPI
+gateway used here bundles in tools from unrelated domains alongside the four
+Star Wars ones this course actually uses. `.filtered(...)` wraps a toolset
+so the model only ever sees the subset that matches a predicate, without
+needing to change anything on the server side.
+
+## 6. Two ways to package reusable behavior: subagents vs. skills
+
+Parts 4 and 5 solve the same problem — turn retrieved or discussed material
+into a structured executive brief — with two different mechanisms.
+
+| Approach | How it works | What the sub-behavior sees | Model instances |
+|---|---|---|---|
+| Subagent (Part 4) | A tool's implementation calls `await self.brief_agent.run(material)`, where `brief_agent` is a second `PydanticAgent` with its own instructions | Only the `material` string it was handed — not the parent's conversation history | Two: the parent agent and the subagent |
+| Skill (Part 5) | A tool returns the text of a Markdown instructions file; the same agent then follows those instructions itself | The full parent conversation, since no second agent is involved | One |
+
+A subagent is appropriate when the sub-task benefits from a genuinely
+separate context window, its own model call, or isolation from the parent's
+history. A skill is appropriate when the "new capability" is really just a
+different set of instructions the existing agent should follow — cheaper,
+since it costs one extra tool round-trip rather than an entire additional
+model run.
+
+One practical trap with subagents: if the parent agent's own instructions
+give it a distinct persona, it may unintentionally paraphrase the subagent's
+output into its own voice instead of returning it unchanged. Part 4's
+`SYSTEM_PROMPT` explicitly instructs the parent to return the brief
+"unchanged, character for character" to avoid this.
+
+## 7. Toolset design: keep capabilities separate
+
+Every lesson from Part 2 onward could technically register all of its tools
+on one `FunctionToolset`. Instead, each distinct capability gets its own
+toolset — `course_note_toolset` for retrieval, `brief_toolset` (Part 4) or
+`skill_toolset` (Part 5) for the summary route, and the MCP-backed
+`star_wars_toolset` for external data. This is a teaching choice, not a
+technical requirement: it keeps each capability's tools visible and
+independently testable, and makes it obvious, reading `agent.py`, exactly
+which toolset a new feature added.
+
+## 8. Observability: the trace log
+
+Every lesson accepts `python main.py --trace`. The terminal still shows only
+the conversation; a separate, credential-redacted log file in that lesson's
+`logs/` folder records what actually happened. The shared `LiveTrace` class
+(`shared_trace.py`) writes:
+
+- a startup block with the system prompt sent with every turn, plus the
+  resolved tool names, descriptions, and (for local tools) parameter schemas;
+- a banner marking the start of each conversation turn;
+- the user's raw message and the expanded input sent to the model;
+- every tool call, its arguments, and its result;
+- the model's streamed text.
+
+Comparing the Part 1 and Part 2 logs for the same question is a good way to
+see the difference between application-managed and model-selected retrieval
+described in section 3 above; comparing the Part 4 and Part 5 logs shows the
+subagent handoff versus the single-agent skill load.
+
+## 9. Common agent design pitfalls
+
+**Forgetting to open an MCP toolset.** Because `MCPToolset` needs an active
+connection, calling `agent.run()` before `__aenter__()` has completed will
+fail. Always pair the open/close calls in `__aenter__` / `__aexit__`.
+
+**Letting a persona leak or get lost.** As noted in section 6, a parent
+agent with its own voice can silently override a subagent's persona unless
+told explicitly to pass the text through unchanged.
+
+**One toolset doing too much.** Mixing unrelated tools on a single toolset
+makes it harder for students (and for the model) to see which capability a
+tool belongs to; prefer one toolset per capability, as in section 7.
+
+**Trusting a shared gateway's full tool list.** A remote MCP server may
+expose many more tools than one integration needs. Filter with
+`.filtered(...)` rather than relying on the model to ignore irrelevant
+tools on its own.
+
+**Confusing conversation history with tool results.** `message_history`
+should hold the conversation as it happened, including prior tool calls and
+results; it is not the place to re-inject retrieval context for every past
+turn (see `RAG_TUTORIAL.md` for the same issue from the retrieval side).
+
+## 10. Quick-reference checklist
+
+- [ ] Instructions are narrow and name each tool's purpose.
+- [ ] Each tool has a clear docstring; it becomes the model-facing
+      description.
+- [ ] `message_history` is saved and passed back into every subsequent call.
+- [ ] MCP toolsets are opened before use and closed on shutdown.
+- [ ] A large remote toolset is filtered down to the tools actually needed.
+- [ ] Subagents receive only the material they need, not the full parent
+      history.
+- [ ] A parent agent that must pass through a subagent's or skill's text
+      verbatim is told so explicitly.
+- [ ] Related tools are grouped into their own toolset per capability.
+- [ ] `--trace` logs are reviewed when a tool call or persona is not behaving
+      as expected.

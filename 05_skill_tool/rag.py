@@ -79,10 +79,13 @@ def retrieve(collection: object, question: str, limit: int = 3) -> list[Retrieva
 
 
 def format_context(hits: list[RetrievalHit]) -> str:
-    """Render retrieved notes for a model prompt or function-tool result."""
+    """Render retrieved notes and their distances for a model prompt or tool result."""
     if not hits:
         return "No course-note matches were found."
-    return "\n\n".join(f"[{hit['source']}]\n{hit['text']}" for hit in hits)
+    return "\n\n".join(
+        f"[{hit['source']} | retrieval distance: {hit['distance']:.3f}]\n{hit['text']}"
+        for hit in hits
+    )
 
 
 def open_collection(base: str | Path = INDEX_DIR) -> object:

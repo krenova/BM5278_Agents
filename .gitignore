@@ -1,5 +1,7 @@
 .venv/
 **/.env
 **/.chroma/
+**/.ruff_cache/
+**/logs/
 __pycache__/
 *.pyc

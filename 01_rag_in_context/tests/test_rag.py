@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 
-from rag import chunk_text, index_documents, load_documents, retrieve
+from rag import chunk_text, format_context, index_documents, load_documents, retrieve
 
 
 class FakeCollection:
@@ -24,7 +24,11 @@ class RagTests(unittest.TestCase):
     def test_index_and_retrieve(self):
         collection = FakeCollection()
         self.assertEqual(index_documents(collection, [("notes", "a note")]), 1)
-        self.assertEqual(retrieve(collection, "question")[0]["source"], "notes")
+        hits = retrieve(collection, "question")
+        self.assertEqual(hits[0]["source"], "notes")
+        self.assertEqual(
+            format_context(hits), "[notes | retrieval distance: 0.120]\nretrieved text"
+        )
 
 
 if __name__ == "__main__":

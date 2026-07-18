@@ -1,28 +1,25 @@
-"""Part 5 assistant: Star Wars MCP tools plus a Markdown-backed summary skill."""
+"""Part 3 assistant: model-selected RAG plus a remote Star Wars MCP toolset."""
 
-from pathlib import Path
 from trace import LiveTrace, describe_local_toolset, describe_mcp_toolset
 
 from pydantic_ai import Agent as PydanticAgent
 from pydantic_ai import FunctionToolset
 from pydantic_ai.mcp import MCPToolset, StreamableHttpTransport
 from rag import format_context, open_collection, retrieve
-from skill_loader import load_skill
 
 SYSTEM_PROMPT = """You are a helpful course assistant. Use search_course_notes for
-course questions and Star Wars tools for questions about characters, planets,
-starships, or films. For an executive brief or summary, call
-load_executive_brief_skill, then follow its instructions yourself. Mention tool use."""
+course, RAG, or Pydantic AI questions, and use Star Wars tools for questions about
+characters, planets, starships, or films. Do not use tools for ordinary general
+knowledge. Mention used sources or tools."""
 STAR_WARS_MCP_URL = "https://gateway.pipeworx.io/swapi/mcp"
 # The gateway is a shared multi-domain router that bundles in ~20 unrelated tools
 # (SEC filings, prediction markets, drug data, ...) alongside these four; keep the
 # model's tool list scoped to what this lesson is actually about.
 STAR_WARS_TOOL_NAMES = {"search_people", "get_planet", "get_starship", "get_film"}
-SKILL_PATH = Path(__file__).with_name("SKILL.md")
 
 
 class CourseAssistant:
-    """Owns the Part 3 state plus a Yoda-voiced, Markdown-backed skill tool."""
+    """Owns the Part 2 state plus the remote Star Wars MCP-tool lifecycle."""
 
     def __init__(self, model_name: str, trace: bool = False) -> None:
         self.collection = open_collection()  # Chroma collection for course-note retrieval.
@@ -48,22 +45,12 @@ class CourseAssistant:
             lambda ctx, tool_def: tool_def.name in STAR_WARS_TOOL_NAMES
         )
 
-        # A separate toolset for the single skill-loading tool, kept apart from
-        # course_note_toolset so it reads as its own capability.
-        self.skill_toolset = FunctionToolset()
-
-        @self.skill_toolset.tool_plain
-        def load_executive_brief_skill() -> str:
-            """Load Markdown instructions for executive-brief summaries."""
-            self.diagnostics.append("[skill] loaded SKILL.md")
-            skill = load_skill(SKILL_PATH)
-            self.trace.block("Loaded executive-brief skill (SKILL.md)", skill)
-            return skill
-
+        # The main agent can use either the local course-note toolset or the
+        # remote Star Wars MCP toolset.
         self.agent = PydanticAgent(
             model_name,
             instructions=SYSTEM_PROMPT,
-            toolsets=[self.course_note_toolset, self.skill_toolset, self.star_wars_toolset],
+            toolsets=[self.course_note_toolset, self.star_wars_toolset],
         )
 
     # Context manager methods: start and close the remote MCP toolset.
@@ -78,7 +65,6 @@ class CourseAssistant:
         if self.trace.enabled:
             self.trace.log_system_prompt(SYSTEM_PROMPT)
             tools = describe_local_toolset(self.course_note_toolset)
-            tools += describe_local_toolset(self.skill_toolset)
             remote_tools = await describe_mcp_toolset(self.star_wars_mcp)
             tools += [tool for tool in remote_tools if tool["name"] in STAR_WARS_TOOL_NAMES]
             self.trace.json("Startup — Tools resolved (cached for the rest of the session)", tools)
@@ -94,7 +80,7 @@ class CourseAssistant:
             self.trace.close()
 
     async def ask(self, question: str) -> str:
-        """Give the model a turn; it can select local tools, MCP tools, or the skill."""
+        """Give the model a turn; it can select either local or MCP tools."""
         self.diagnostics.clear()
         self.trace.begin_turn(SYSTEM_PROMPT, self.message_history, question, user_input=question)
         result = await self.agent.run(

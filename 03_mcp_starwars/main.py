@@ -9,10 +9,10 @@ from config import load_model_name
 
 async def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--trace", action="store_true", help="show live model and tool messages")
+    parser.add_argument("--trace", action="store_true", help="save a detailed trace log")
     args = parser.parse_args()
     async with CourseAssistant(load_model_name(), trace=args.trace) as assistant:
-        print("Part 3: model-selected RAG plus local MCP weather. Type quit to leave.")
+        print("Part 3: model-selected RAG plus remote Star Wars MCP. Type quit to leave.")
 
         while True:
             question = input("\nyou> ").strip()
@@ -22,9 +22,7 @@ async def main() -> None:
                 continue
 
             answer = await assistant.ask(question)
-            if args.trace:
-                print()
-            else:
+            if not args.trace:
                 diagnostic = "\n".join(assistant.diagnostics)
                 print(diagnostic or "[tool] no local retrieval call")
                 print(f"assistant> {answer}")
