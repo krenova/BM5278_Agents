@@ -42,7 +42,7 @@ class CourseAssistant:
         prompt = f"Course-note context:\n{format_context(hits)}\n\nUser question: {question}"
 
         # 4. If tracing is enabled, show the system prompt, message history, and prompt
-        self.trace.begin_turn(SYSTEM_PROMPT, self.message_history, prompt, user_input=question)
+        self.trace.begin_turn(SYSTEM_PROMPT, prompt, user_input=question)
 
         # 5. Run the model with the context
         result = self.agent.run_sync(

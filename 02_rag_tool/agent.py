@@ -49,7 +49,7 @@ class CourseAssistant:
     def ask(self, question: str) -> str:
         """Give the model a turn; it decides whether to use registered tools."""
         self.diagnostics.clear()
-        self.trace.begin_turn(SYSTEM_PROMPT, self.message_history, question, user_input=question)
+        self.trace.begin_turn(SYSTEM_PROMPT, question, user_input=question)
         result = self.agent.run_sync(
             question,
             message_history=self.message_history,

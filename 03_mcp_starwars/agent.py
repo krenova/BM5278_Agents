@@ -82,7 +82,7 @@ class CourseAssistant:
     async def ask(self, question: str) -> str:
         """Give the model a turn; it can select either local or MCP tools."""
         self.diagnostics.clear()
-        self.trace.begin_turn(SYSTEM_PROMPT, self.message_history, question, user_input=question)
+        self.trace.begin_turn(SYSTEM_PROMPT, question, user_input=question)
         result = await self.agent.run(
             question,
             message_history=self.message_history,

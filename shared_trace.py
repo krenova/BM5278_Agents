@@ -22,7 +22,17 @@ from pydantic_ai.messages import (
     ToolResultEvent,
 )
 
+# Matches a credential-like field name on its own, e.g. as a dict key or embedded in
+# an env var name like OPENAI_API_KEY (no \b: "_" is a word char, so a boundary would
+# not exist between "OPENAI_" and "API_KEY").
 _SECRET_FIELD = re.compile(r"(api[ _-]?key|token|secret|password|credential|authorization)", re.I)
+# Matches only an actual `field = value` / `field: value` assignment, so prose that
+# merely contains one of these words (e.g. "a secret base", "acted secretly") is left
+# alone; only genuine key/value leaks like "api_key=sk-..." get redacted.
+_SECRET_ASSIGNMENT = re.compile(
+    r"(api[ _-]?key|token|secret|password|credential|authorization)(\s*[:=]\s*)(\S+)",
+    re.I,
+)
 _BANNER_WIDTH = 88
 
 
@@ -134,7 +144,6 @@ class LiveTrace:
     def begin_turn(
         self,
         instructions: str,
-        history: list[Any],
         model_input: str,
         *,
         label: str = "Agent",
@@ -176,11 +185,11 @@ class LiveTrace:
             material,
         )
 
-    async def event_stream_handler(self, _ctx: Any, events: AsyncIterable[Any]) -> None:
+    async def event_stream_handler(self, _: Any, events: AsyncIterable[Any]) -> None:
         """Log events and stream the user-facing agent's text to the terminal."""
         await self._handle_events(events, show_terminal=True)
 
-    async def log_event_stream_handler(self, _ctx: Any, events: AsyncIterable[Any]) -> None:
+    async def log_event_stream_handler(self, _: Any, events: AsyncIterable[Any]) -> None:
         """Log events without exposing an internal agent's text in the terminal."""
         await self._handle_events(events, show_terminal=False)
 
@@ -200,14 +209,14 @@ class LiveTrace:
                     self._event_label(f"Tool result: {event.part.tool_name}"), event.part.content
                 )
             elif isinstance(event, PartStartEvent) and isinstance(event.part, TextPart):
-                self._write_model_text(event.index, event.part.content, show_terminal)
+                self._write_model_text(event.part.content, show_terminal)
                 printed_text_indices.add(event.index)
             elif isinstance(event, PartDeltaEvent) and isinstance(event.delta, TextPartDelta):
-                self._write_model_text(event.index, event.delta.content_delta, show_terminal)
+                self._write_model_text(event.delta.content_delta, show_terminal)
                 printed_text_indices.add(event.index)
             elif isinstance(event, PartEndEvent) and isinstance(event.part, TextPart):
                 if event.index not in printed_text_indices:
-                    self._write_model_text(event.index, event.part.content, show_terminal)
+                    self._write_model_text(event.part.content, show_terminal)
 
     def finish_response(self, response: str) -> None:
         """End the terminal response, falling back to the completed output if needed."""
@@ -220,7 +229,7 @@ class LiveTrace:
         self._terminal_text_open = False
         self._terminal_had_text = False
 
-    def _write_model_text(self, index: int, content: str, show_terminal: bool) -> None:
+    def _write_model_text(self, content: str, show_terminal: bool) -> None:
         if not self.enabled or not content:
             return
         if not self._log_text_open:
@@ -271,4 +280,4 @@ class LiveTrace:
     def _redact(self, text: str) -> str:
         for secret in self._secrets:
             text = text.replace(secret, "[REDACTED]")
-        return _SECRET_FIELD.sub(r"\1=[REDACTED]", text)
+        return _SECRET_ASSIGNMENT.sub(r"\1\2[REDACTED]", text)

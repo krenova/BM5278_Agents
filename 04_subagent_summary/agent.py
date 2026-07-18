@@ -67,7 +67,6 @@ class CourseAssistant:
             self.trace.subagent_handoff(material)
             self.trace.begin_turn(
                 BRIEF_PROMPT,
-                [],
                 material,
                 label="Executive-brief subagent",
                 conversation_turn=False,
@@ -119,7 +118,6 @@ class CourseAssistant:
         self.diagnostics.clear()
         self.trace.begin_turn(
             SYSTEM_PROMPT,
-            self.message_history,
             question,
             label="Parent agent",
             user_input=question,

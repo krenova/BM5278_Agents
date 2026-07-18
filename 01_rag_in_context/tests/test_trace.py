@@ -7,7 +7,6 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
-from types import SimpleNamespace
 from trace import LiveTrace
 from unittest.mock import patch
 
@@ -40,6 +39,24 @@ class LiveTraceTests(unittest.TestCase):
         self.assertNotIn("expected-secret", rendered)
         self.assertNotIn("not-shown", rendered)
         self.assertEqual(output.getvalue(), "")
+
+    def test_redaction_does_not_mangle_ordinary_prose(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            with redirect_stdout(io.StringIO()):
+                trace = LiveTrace(True, log_dir=Path(directory))
+                trace.block(
+                    "Streamed model text",
+                    "The Rebels flee to a secret base and acted secretly to hide it.",
+                )
+                trace.block("Input", "password: hunter2")
+                trace.close()
+                assert trace.log_path is not None
+                rendered = trace.log_path.read_text(encoding="utf-8")
+
+        self.assertIn("a secret base", rendered)
+        self.assertIn("acted secretly", rendered)
+        self.assertIn("password: [REDACTED]", rendered)
+        self.assertNotIn("hunter2", rendered)
 
     def test_tool_events_are_logged_but_not_printed(self) -> None:
         async def events():
@@ -110,20 +127,14 @@ class LiveTraceTests(unittest.TestCase):
         self.assertIn("Parent → executive-brief subagent handoff", rendered)
 
     def test_numbered_turns_separate_user_messages_from_model_input(self) -> None:
-        history = [
-            SimpleNamespace(
-                parts=[SimpleNamespace(part_kind="user-prompt", content="First question")]
-            )
-        ]
-
         with tempfile.TemporaryDirectory() as directory:
             with redirect_stdout(io.StringIO()):
                 trace = LiveTrace(True, log_dir=Path(directory))
                 trace.begin_turn(
-                    "System instructions", [], "Expanded first prompt", user_input="First question"
+                    "System instructions", "Expanded first prompt", user_input="First question"
                 )
                 trace.finish_response("First answer")
-                trace.begin_turn("System instructions", history, "Follow-up question")
+                trace.begin_turn("System instructions", "Follow-up question")
                 trace.finish_response("Follow-up answer")
                 trace.close()
             assert trace.log_path is not None
@@ -143,10 +154,9 @@ class LiveTraceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with redirect_stdout(io.StringIO()):
                 trace = LiveTrace(True, log_dir=Path(directory))
-                trace.begin_turn("Parent instructions", [], "Question", label="Parent agent")
+                trace.begin_turn("Parent instructions", "Question", label="Parent agent")
                 trace.begin_turn(
                     "Subagent instructions",
-                    [],
                     "Material",
                     label="Executive-brief subagent",
                     conversation_turn=False,
