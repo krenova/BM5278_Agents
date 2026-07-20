@@ -7,12 +7,17 @@ from config import load_model_name
 
 
 def main() -> None:
+
+    # Parses command-line arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("--trace", action="store_true", help="save a detailed trace log")
     args = parser.parse_args()
+
+    # Initializes the course assistant with the specified model and trace option
     assistant = CourseAssistant(load_model_name(), trace=args.trace)
     print("Part 1: RAG context is retrieved on every turn. Type quit to leave.")
 
+    # Starts the interactive loop for user input and model response
     try:
         while True:
             question = input("\nyou> ").strip()

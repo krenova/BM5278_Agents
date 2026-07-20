@@ -7,6 +7,9 @@ from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
+CHUNK_SIZE = 700
+RETRIEVAL_LIMIT = 3
+
 
 def load_model_name() -> str:
     """Load and validate the model selection from the project-root .env file."""

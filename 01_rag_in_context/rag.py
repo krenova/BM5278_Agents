@@ -5,12 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Iterable, TypedDict
 
-CHUNK_SIZE = 700
+from config import CHUNK_SIZE, RETRIEVAL_LIMIT
+
 LESSON_DIR = Path(__file__).parent
 DOCUMENTS_DIR = LESSON_DIR / "documents"
 INDEX_DIR = LESSON_DIR / ".chroma"
 
-
+# Define the data structure for a retrieval hit
 class RetrievalHit(TypedDict):
     """A source passage returned by the local vector index."""
 
@@ -18,7 +19,7 @@ class RetrievalHit(TypedDict):
     source: str
     distance: float
 
-
+# Load the course-note documents as a list of tuples for retrieval
 def load_documents(folder: str | Path) -> list[tuple[str, str]]:
     """Return stable source IDs and text from non-empty .txt files."""
     documents: list[tuple[str, str]] = []
@@ -29,6 +30,7 @@ def load_documents(folder: str | Path) -> list[tuple[str, str]]:
     return documents
 
 
+# Split text into chunks for indexing (no overlapping chunks, split on paragraph boundaries)
 def chunk_text(text: str, size: int = CHUNK_SIZE) -> list[str]:
     """Split text on paragraph boundaries without exceeding the target where possible."""
     chunks: list[str] = []
@@ -44,7 +46,7 @@ def chunk_text(text: str, size: int = CHUNK_SIZE) -> list[str]:
         chunks.append(current)
     return chunks
 
-
+# Index documents into the Chroma collection and return the number of indexed chunks
 def index_documents(collection: object, documents: Iterable[tuple[str, str]]) -> int:
     """Upsert all document chunks and return the number of indexed chunks."""
     ids: list[str] = []
@@ -59,8 +61,8 @@ def index_documents(collection: object, documents: Iterable[tuple[str, str]]) ->
         collection.upsert(ids=ids, documents=texts, metadatas=metadatas)
     return len(ids)
 
-
-def retrieve(collection: object, question: str, limit: int = 3) -> list[RetrievalHit]:
+# Retrieve the closest course-note chunks for a question
+def retrieve(collection: object, question: str, limit: int = RETRIEVAL_LIMIT) -> list[RetrievalHit]:
     """Retrieve the closest course-note chunks for a question."""
     result = collection.query(
         query_texts=[question],
@@ -77,7 +79,7 @@ def retrieve(collection: object, question: str, limit: int = 3) -> list[Retrieva
         )
     ]
 
-
+# Format the retrieved notes and their distances for a model prompt or tool result
 def format_context(hits: list[RetrievalHit]) -> str:
     """Render retrieved notes and their distances for a model prompt or tool result."""
     if not hits:
@@ -87,12 +89,14 @@ def format_context(hits: list[RetrievalHit]) -> str:
         for hit in hits
     )
 
-
+# Open the Chroma collection and refresh its source documents
 def open_collection(base: str | Path = INDEX_DIR) -> object:
     """Open this lesson's persistent Chroma collection and refresh its source documents."""
     import chromadb
 
     client = chromadb.PersistentClient(path=str(base))
+    if "course_notes" in {c.name for c in client.list_collections()}:
+        client.delete_collection("course_notes")
     collection = client.get_or_create_collection("course_notes")
     index_documents(collection, load_documents(DOCUMENTS_DIR))
     return collection

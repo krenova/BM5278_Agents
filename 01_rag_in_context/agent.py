@@ -33,11 +33,11 @@ class CourseAssistant:
         # 1. Retrieve the closest course-note chunks for the question
         hits = retrieve(self.collection, question)
 
-        # 2. Save the retrieval diagnostics and run the model with the context
+        # 2. Save the retrieval diagnostics and display them in convo if tracing is off
         self.diagnostics = [
             "[retrieval] " + ", ".join(f"{hit['source']} ({hit['distance']:.3f})" for hit in hits)
         ]
-
+        
         # 3. Format the context and run the model with the context
         prompt = f"Course-note context:\n{format_context(hits)}\n\nUser question: {question}"
 

@@ -5,7 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Iterable, TypedDict
 
-CHUNK_SIZE = 700
+from config import CHUNK_SIZE, RETRIEVAL_LIMIT
+
 LESSON_DIR = Path(__file__).parent
 DOCUMENTS_DIR = LESSON_DIR / "documents"
 INDEX_DIR = LESSON_DIR / ".chroma"
@@ -60,7 +61,7 @@ def index_documents(collection: object, documents: Iterable[tuple[str, str]]) ->
     return len(ids)
 
 
-def retrieve(collection: object, question: str, limit: int = 3) -> list[RetrievalHit]:
+def retrieve(collection: object, question: str, limit: int = RETRIEVAL_LIMIT) -> list[RetrievalHit]:
     """Retrieve the closest course-note chunks for a question."""
     result = collection.query(
         query_texts=[question],
@@ -93,6 +94,8 @@ def open_collection(base: str | Path = INDEX_DIR) -> object:
     import chromadb
 
     client = chromadb.PersistentClient(path=str(base))
+    if "course_notes" in {c.name for c in client.list_collections()}:
+        client.delete_collection("course_notes")
     collection = client.get_or_create_collection("course_notes")
     index_documents(collection, load_documents(DOCUMENTS_DIR))
     return collection
