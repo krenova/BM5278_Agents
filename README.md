@@ -6,9 +6,6 @@ The shared `shared_trace.py` module implements trace logging once for all lesson
 Each lesson's small `trace.py` adapter supplies its own folder for log placement while
 preserving standalone `python main.py` runs.
 
-For a conceptual and implementation guide to retrieval-augmented generation, see
-[`RAG_TUTORIAL.md`](RAG_TUTORIAL.md).
-
 ## Setup
 
 ```bash
