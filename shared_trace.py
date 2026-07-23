@@ -37,31 +37,45 @@ _BANNER_WIDTH = 88
 
 
 def describe_local_toolset(toolset: Any) -> list[dict[str, Any]]:
-    """List a local FunctionToolset's tools with their full JSON parameter schema.
+    """List a local FunctionToolset's tools exactly as pydantic_ai sends them to the model.
 
-    This is exactly the (name, description, schema) triple pydantic_ai sends the
-    model on every turn — no network call is involved, so it can run synchronously.
+    This is the (name, description, parameters_json_schema) triple pydantic_ai sends
+    the model on every turn — no network call is involved, so it can run synchronously.
     """
     return [
         {
             "name": tool.name,
             "description": tool.description,
-            "parameters": tool.function_schema.json_schema,
+            "parameters_json_schema": tool.tool_def.parameters_json_schema,
         }
         for tool in toolset.tools.values()
     ]
 
 
 async def describe_mcp_toolset(toolset: Any) -> list[dict[str, Any]]:
-    """List a remote MCP toolset's tools as name + description only (no schema).
+    """List a remote MCP toolset's tools exactly as pydantic_ai sends them to the model.
 
     Calls the same `list_tools()` pydantic_ai issues automatically on every
-    `agent.run()` (and caches after the first call). Schemas are omitted here
-    because a real gateway can expose dozens of unrelated tools with large
-    schemas; see the tool's own `inputSchema` if you need the full picture.
+    `agent.run()` (and caches after the first call). Each MCP tool's `inputSchema` is
+    passed through by pydantic_ai unchanged as `parameters_json_schema` (verified
+    against `MCPToolset.get_tools`), so this is the full schema, not a summary —
+    including per-field descriptions and worked examples the server provides.
+
+    Note: this is pydantic_ai's canonical, provider-agnostic schema — the last shared
+    representation before each model class serializes it onto the wire (OpenAI/Google
+    use a `parameters` field, Anthropic uses `input_schema`, and some providers strip
+    unsupported keys like `examples`). It's the right level for "what the LLM is told",
+    since the wire format is just an encoding of this same schema.
     """
     mcp_tools = await toolset.list_tools()
-    return [{"name": tool.name, "description": tool.description} for tool in mcp_tools]
+    return [
+        {
+            "name": tool.name,
+            "description": tool.description,
+            "parameters_json_schema": tool.inputSchema,
+        }
+        for tool in mcp_tools
+    ]
 
 
 class LiveTrace:
